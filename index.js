@@ -19,6 +19,30 @@ const client = new MongoClient(uri, {
   }
 });
 
+
+async function run() {
+  try {
+    // Connect the client to the server	(optional starting in v4.7)
+    await client.connect();
+
+    const db =client.db('blood-donation-db')
+    const bloodCollection = db.collection('bloods')
+
+    app.post('/bloods', async(req,res)=>{
+        const blood = req.body
+        const result =await bloodCollection.insertOne(blood)
+        res.send(result)
+    }
+    )
+    // Send a ping to confirm a successful connection
+    await client.db("admin").command({ ping: 1 });
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+  } finally {
+    // Ensures that the client will close when you finish/error
+    await client.close();
+  }
+}
+
 app.get('/', (req, res) => {
   res.send('blood donation')
 })
