@@ -9,7 +9,6 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.two3kqb.mongodb.net/?appName=Cluster0`;
 const client = new MongoClient(uri, {
   serverApi: {
@@ -24,11 +23,14 @@ async function run() {
     await client.connect();
     const db = client.db("blood-donation-db");
     const usersCollection = db.collection("users");
+    const donationRequestsCollection = db.collection("donation-requests");
 
     app.post("/users", async (req, res) => {
       try {
         const user = req.body;
-        const existingUser = await usersCollection.findOne({ email: user.email });
+        const existingUser = await usersCollection.findOne({
+          email: user.email,
+        });
         if (existingUser) {
           return res.send({ message: "user already exists" });
         }
@@ -71,13 +73,40 @@ async function run() {
       }
     });
 
+    // Create a donation request
+    app.post("/donation-requests", async (req, res) => {
+      try {
+        const request = req.body;
+
+        const requester = await usersCollection.findOne({
+          email: request.requesterEmail,
+        });
+        if (!requester || requester.status !== "active") {
+          return res
+            .status(403)
+            .send({ message: "Blocked users cannot create requests" });
+        }
+
+        const newRequest = {
+          ...request,
+          status: "pending", 
+          createdAt: new Date(),
+        };
+
+        const result = await donationRequestsCollection.insertOne(newRequest);
+        res.send(result);
+      } catch (err) {
+        console.error("Create donation request error:", err);
+        res.status(500).send({ message: "Failed to create donation request" });
+      }
+    });
+
     app.get("/", (req, res) => {
       res.send("Blood donation API running");
     });
 
     console.log("MongoDB connected successfully");
   } finally {
- 
   }
 }
 
