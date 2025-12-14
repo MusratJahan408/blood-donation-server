@@ -101,6 +101,41 @@ async function run() {
       }
     });
 
+        app.get("/donation-requests", async (req, res) => {
+      try {
+        const { requesterEmail, status, page = 1, limit = 10 } = req.query;
+
+        const query = { requesterEmail };
+        if (status) query.status = status;
+
+        const requests = await donationRequestsCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .skip((parseInt(page) - 1) * parseInt(limit))
+          .limit(parseInt(limit))
+          .toArray();
+
+        const total = await donationRequestsCollection.countDocuments(query);
+
+        res.send({ total, page: parseInt(page), limit: parseInt(limit), requests });
+      } catch (err) {
+        console.error("Fetch donation requests error:", err);
+        res.status(500).send({ message: "Failed to fetch donation requests" });
+      }
+    });
+
+
+    app.get("/donation-requests/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const request = await donationRequestsCollection.findOne({ _id: new ObjectId(id) });
+        res.send(request);
+      } catch (err) {
+        console.error("Fetch single donation request error:", err);
+        res.status(500).send({ message: "Failed to fetch donation request" });
+      }
+    });
+
     app.get("/", (req, res) => {
       res.send("Blood donation API running");
     });
@@ -115,3 +150,5 @@ run().catch((err) => console.error("MongoDB connection error:", err));
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
+
