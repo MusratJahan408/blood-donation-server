@@ -89,7 +89,7 @@ async function run() {
 
         const newRequest = {
           ...request,
-          status: "pending", 
+          status: "pending",
           createdAt: new Date(),
         };
 
@@ -101,7 +101,7 @@ async function run() {
       }
     });
 
-        app.get("/donation-requests", async (req, res) => {
+    app.get("/donation-requests", async (req, res) => {
       try {
         const { requesterEmail, status, page = 1, limit = 10 } = req.query;
 
@@ -117,22 +117,59 @@ async function run() {
 
         const total = await donationRequestsCollection.countDocuments(query);
 
-        res.send({ total, page: parseInt(page), limit: parseInt(limit), requests });
+        res.send({
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          requests,
+        });
       } catch (err) {
         console.error("Fetch donation requests error:", err);
         res.status(500).send({ message: "Failed to fetch donation requests" });
       }
     });
 
-
     app.get("/donation-requests/:id", async (req, res) => {
       try {
         const id = req.params.id;
-        const request = await donationRequestsCollection.findOne({ _id: new ObjectId(id) });
+        const request = await donationRequestsCollection.findOne({
+          _id: new ObjectId(id),
+        });
         res.send(request);
       } catch (err) {
         console.error("Fetch single donation request error:", err);
         res.status(500).send({ message: "Failed to fetch donation request" });
+      }
+    });
+
+    app.patch("/donation-requests/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const updatedData = req.body;
+        delete updatedData._id;
+
+        const result = await donationRequestsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedData }
+        );
+
+        res.send(result);
+      } catch (err) {
+        console.error("Update donation request error:", err);
+        res.status(500).send({ message: "Failed to update donation request" });
+      }
+    });
+
+    app.delete("/donation-requests/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await donationRequestsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        res.send(result);
+      } catch (err) {
+        console.error("Delete donation request error:", err);
+        res.status(500).send({ message: "Failed to delete donation request" });
       }
     });
 
@@ -150,5 +187,3 @@ run().catch((err) => console.error("MongoDB connection error:", err));
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
-
-
