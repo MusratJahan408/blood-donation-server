@@ -1,52 +1,88 @@
-const express = require('express')
-const cors = require('cors')
-const app = express()
-const { MongoClient, ServerApiVersion } = require('mongodb');
-require('dotenv').config()
-const port =process.env.port || 3000
+const express = require("express");
+const cors = require("cors");
+const { MongoClient, ServerApiVersion } = require("mongodb");
+require("dotenv").config();
 
-// middleware 
-app.use(express.json())
-app.use(cors())
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.two3kqb.mongodb.net/?appName=Cluster0`;
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
 });
-
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
+    const db = client.db("blood-donation-db");
+    const usersCollection = db.collection("users");
 
-    const db =client.db('blood-donation-db')
-    const bloodCollection = db.collection('bloods')
+    app.post("/users", async (req, res) => {
+      try {
+        const user = req.body;
+        const existingUser = await usersCollection.findOne({ email: user.email });
+        if (existingUser) {
+          return res.send({ message: "user already exists" });
+        }
+        const result = await usersCollection.insertOne(user);
+        res.send(result);
+      } catch (err) {
+        console.error("Registration error:", err);
+        res.status(500).send({ message: "Registration failed" });
+      }
+    });
 
-    app.post('/bloods', async(req,res)=>{
-        const blood = req.body
-        const result =await bloodCollection.insertOne(blood)
-        res.send(result)
-    }
-    )
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    app.get("/users/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const user = await usersCollection.findOne({ email });
+        res.send(user);
+      } catch (err) {
+        console.error("Fetch profile error:", err);
+        res.status(500).send({ message: "Failed to fetch profile" });
+      }
+    });
+
+    // Update profile
+    app.patch("/users/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const updatedData = { ...req.body };
+        delete updatedData._id;
+        delete updatedData.email;
+
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: updatedData }
+        );
+
+        res.send(result);
+      } catch (err) {
+        console.error("Profile update error:", err);
+        res.status(500).send({ message: "Profile update failed" });
+      }
+    });
+
+    app.get("/", (req, res) => {
+      res.send("Blood donation API running");
+    });
+
+    console.log("MongoDB connected successfully");
   } finally {
-    // Ensures that the client will close when you finish/error
-    await client.close();
+ 
   }
 }
 
-app.get('/', (req, res) => {
-  res.send('blood donation')
-})
+run().catch((err) => console.error("MongoDB connection error:", err));
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`)
-})
+  console.log(`Server running on port ${port}`);
+});
