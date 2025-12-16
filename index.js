@@ -110,6 +110,33 @@ async function run() {
     });
 
 
+    app.patch("/users/block/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: "blocked" } }
+        );
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to block user" });
+      }
+    });
+
+     app.patch("/users/unblock/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: "active" } }
+        );
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to unblock user" });
+      }
+    });
+
+
     app.get("/donation-requests/recent", async (req, res) => {
       try {
         const email = req.query.email;
