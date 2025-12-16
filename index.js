@@ -165,60 +165,29 @@ async function run() {
 
     // donation 
 
-    app.get("/donation-requests/recent", async (req, res) => {
-      try {
-        const email = req.query.email;
-
-        if (!email) {
-          return res.status(400).send({ message: "Email is required" });
-        }
-
-        const result = await donationRequestsCollection
-          .find({ requesterEmail: email })
-          .sort({ createdAt: -1 })
-          .limit(3)
-          .toArray();
-
-        res.send(result);
-      } catch (error) {
-        console.error("Recent donation request error:", error);
-        res.status(500).send({ message: "Failed to load recent requests" });
-      }
-    });
-
-    // Create a donation request
-    app.post("/donation-requests", async (req, res) => {
+     app.post("/donation-requests", async (req, res) => {
       try {
         const request = req.body;
+        const requester = await usersCollection.findOne({ email: request.requesterEmail });
 
-        const requester = await usersCollection.findOne({
-          email: request.requesterEmail,
-        });
         if (!requester || requester.status !== "active") {
-          return res
-            .status(403)
-            .send({ message: "Blocked users cannot create requests" });
+          return res.status(403).send({ message: "Blocked users cannot create requests" });
         }
 
-        const newRequest = {
-          ...request,
-          status: "pending",
-          createdAt: new Date(),
-        };
-
+        const newRequest = { ...request, status: "pending", createdAt: new Date() };
         const result = await donationRequestsCollection.insertOne(newRequest);
         res.send(result);
       } catch (err) {
-        console.error("Create donation request error:", err);
         res.status(500).send({ message: "Failed to create donation request" });
       }
     });
 
+    // Get donation requests
     app.get("/donation-requests", async (req, res) => {
       try {
         const { requesterEmail, status, page = 1, limit = 10 } = req.query;
-
-        const query = { requesterEmail };
+        const query = {};
+        if (requesterEmail) query.requesterEmail = requesterEmail;
         if (status) query.status = status;
 
         const requests = await donationRequestsCollection
@@ -230,61 +199,58 @@ async function run() {
 
         const total = await donationRequestsCollection.countDocuments(query);
 
-        res.send({
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          requests,
-        });
+        res.send({ total, page: parseInt(page), limit: parseInt(limit), requests });
       } catch (err) {
-        console.error("Fetch donation requests error:", err);
         res.status(500).send({ message: "Failed to fetch donation requests" });
       }
     });
 
+    // Get single donation request
     app.get("/donation-requests/:id", async (req, res) => {
       try {
-        const id = req.params.id;
-        const request = await donationRequestsCollection.findOne({
-          _id: new ObjectId(id),
-        });
+        const request = await donationRequestsCollection.findOne({ _id: new ObjectId(req.params.id) });
         res.send(request);
       } catch (err) {
-        console.error("Fetch single donation request error:", err);
         res.status(500).send({ message: "Failed to fetch donation request" });
       }
     });
 
+    // Update donation request
     app.patch("/donation-requests/:id", async (req, res) => {
       try {
-        const id = req.params.id;
         const updatedData = req.body;
         delete updatedData._id;
 
         const result = await donationRequestsCollection.updateOne(
-          { _id: new ObjectId(id) },
+          { _id: new ObjectId(req.params.id) },
           { $set: updatedData }
         );
-
         res.send(result);
       } catch (err) {
-        console.error("Update donation request error:", err);
         res.status(500).send({ message: "Failed to update donation request" });
       }
     });
 
+    // Delete donation request
     app.delete("/donation-requests/:id", async (req, res) => {
       try {
-        const id = req.params.id;
-        const result = await donationRequestsCollection.deleteOne({
-          _id: new ObjectId(id),
-        });
+        const result = await donationRequestsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
         res.send(result);
       } catch (err) {
-        console.error("Delete donation request error:", err);
         res.status(500).send({ message: "Failed to delete donation request" });
       }
     });
+
+    // Admin sees all donation requests
+    app.get("/admin/donation-requests", async (req, res) => {
+      try {
+        const requests = await donationRequestsCollection.find().sort({ createdAt: -1 }).toArray();
+        res.send(requests);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to fetch admin requests" });
+      }
+    });
+
 
     app.get("/", (req, res) => {
       res.send("Blood donation API running");
