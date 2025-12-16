@@ -96,7 +96,18 @@ async function run() {
     });
 
 
-    
+    app.get("/users", async (req, res) => {
+      try {
+        const { status } = req.query;
+        const query = {};
+        if (status) query.status = status;
+
+        const users = await usersCollection.find(query).toArray();
+        res.send(users);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to fetch users" });
+      }
+    });
 
 
     app.get("/donation-requests/recent", async (req, res) => {
