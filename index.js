@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 
 const app = express();
@@ -25,36 +25,43 @@ async function run() {
     const usersCollection = db.collection("users");
     const donationRequestsCollection = db.collection("donation-requests");
 
-    app.post("/users", async (req, res) => {
+   app.post("/users", async (req, res) => {
       try {
         const user = req.body;
         const existingUser = await usersCollection.findOne({
           email: user.email,
         });
+
         if (existingUser) {
           return res.send({ message: "user already exists" });
         }
-        const result = await usersCollection.insertOne(user);
+
+        const newUser = {
+          ...user,
+          role: "donor",
+          status: "active",
+        };
+
+        const result = await usersCollection.insertOne(newUser);
         res.send(result);
       } catch (err) {
-        console.error("Registration error:", err);
         res.status(500).send({ message: "Registration failed" });
       }
     });
 
-    app.get("/users/:email", async (req, res) => {
+     app.get("/users/:email", async (req, res) => {
       try {
         const email = req.params.email;
         const user = await usersCollection.findOne({ email });
         res.send(user);
       } catch (err) {
-        console.error("Fetch profile error:", err);
         res.status(500).send({ message: "Failed to fetch profile" });
       }
     });
 
+
     // Update profile
-    app.patch("/users/:email", async (req, res) => {
+     app.patch("/users/:email", async (req, res) => {
       try {
         const email = req.params.email;
         const updatedData = { ...req.body };
@@ -65,11 +72,51 @@ async function run() {
           { email },
           { $set: updatedData }
         );
-
         res.send(result);
       } catch (err) {
-        console.error("Profile update error:", err);
         res.status(500).send({ message: "Profile update failed" });
+      }
+    });
+
+    // admin 
+     app.get("/admin-stats", async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.countDocuments();
+        const totalDonationRequests =
+          await donationRequestsCollection.countDocuments();
+
+        res.send({
+          totalUsers,
+          totalDonationRequests,
+          totalFunding: 0,
+        });
+      } catch (err) {
+        res.status(500).send({ message: "Failed to load stats" });
+      }
+    });
+
+
+    
+
+
+    app.get("/donation-requests/recent", async (req, res) => {
+      try {
+        const email = req.query.email;
+
+        if (!email) {
+          return res.status(400).send({ message: "Email is required" });
+        }
+
+        const result = await donationRequestsCollection
+          .find({ requesterEmail: email })
+          .sort({ createdAt: -1 })
+          .limit(3)
+          .toArray();
+
+        res.send(result);
+      } catch (error) {
+        console.error("Recent donation request error:", error);
+        res.status(500).send({ message: "Failed to load recent requests" });
       }
     });
 
