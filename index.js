@@ -137,6 +137,34 @@ async function run() {
     });
 
 
+     app.patch("/users/make-volunteer/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role: "volunteer" } }
+        );
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to make volunteer" });
+      }
+    });
+
+    app.patch("/users/make-admin/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role: "admin" } }
+        );
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to make admin" });
+      }
+    });
+
+    // donation 
+
     app.get("/donation-requests/recent", async (req, res) => {
       try {
         const email = req.query.email;
