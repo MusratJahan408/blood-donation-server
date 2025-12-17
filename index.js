@@ -52,53 +52,61 @@ async function run() {
     app.get("/users/:email", async (req, res) => {
       try {
         const email = req.params.email;
-        const user = await usersCollection.findOne({ email });
+        const user = await usersCollection.findOne({ email: email });
+
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
         res.send(user);
       } catch (err) {
-        res.status(500).send({ message: "Failed to fetch profile" });
+        console.error(err);
+        res.status(500).send({ message: "Internal server error" });
       }
     });
 
     // Update profile
     app.patch("/users/:email", async (req, res) => {
-  try {
-    const email = req.params.email;
-    const updatedData = { ...req.body };
-    delete updatedData.email; 
-    delete updatedData.role;
-    delete updatedData._id;
+      try {
+        const email = req.params.email;
+        const updatedData = { ...req.body };
+        delete updatedData.email;
+        delete updatedData.role;
+        delete updatedData._id;
 
-    const result = await usersCollection.updateOne(
-      { email },
-      { $set: updatedData }
-    );
-    res.send(result);
-  } catch (err) {
-    res.status(500).send({ message: "Profile update failed" });
-  }
-});
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: updatedData }
+        );
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Profile update failed" });
+      }
+    });
 
     // admin
- app.get("/admin-stats", async (req, res) => {
-  try {
-    const totalUsers = await usersCollection.countDocuments();
-    const totalDonationRequests = await donationRequestsCollection.countDocuments();
-    const paymentsCollection = db.collection("payments");
-    const totalFundingResult = await paymentsCollection.aggregate([
-      { $group: { _id: null, total: { $sum: "$amount" } } }
-    ]).toArray();
-    
-    const totalFunding = totalFundingResult.length > 0 ? totalFundingResult[0].total : 0;
+    app.get("/admin-stats", async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.countDocuments();
+        const totalDonationRequests =
+          await donationRequestsCollection.countDocuments();
+        const paymentsCollection = db.collection("payments");
+        const totalFundingResult = await paymentsCollection
+          .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
+          .toArray();
 
-    res.send({
-      totalUsers,
-      totalDonationRequests,
-      totalFunding,
+        const totalFunding =
+          totalFundingResult.length > 0 ? totalFundingResult[0].total : 0;
+
+        res.send({
+          totalUsers,
+          totalDonationRequests,
+          totalFunding,
+        });
+      } catch (err) {
+        res.status(500).send({ message: "Failed to load stats" });
+      }
     });
-  } catch (err) {
-    res.status(500).send({ message: "Failed to load stats" });
-  }
-});
 
     app.get("/users", async (req, res) => {
       try {
@@ -206,13 +214,12 @@ async function run() {
       }
     });
 
-
     app.patch("/donation-requests/status/:id", async (req, res) => {
       try {
         const { status, donorName, donorEmail } = req.body;
         const id = req.params.id;
         const updateDoc = { $set: { status } };
-        if (status === 'inprogress') {
+        if (status === "inprogress") {
           updateDoc.$set.donorName = donorName;
           updateDoc.$set.donorEmail = donorEmail;
         }
@@ -317,16 +324,22 @@ async function run() {
 
     // Admin sees all donation requests
     app.get("/admin/donation-requests", async (req, res) => {
-      try {
-        const requests = await donationRequestsCollection
-          .find()
-          .sort({ createdAt: -1 })
-          .toArray();
-        res.send(requests);
-      } catch (err) {
-        res.status(500).send({ message: "Failed to fetch admin requests" });
-      }
-    });
+  try {
+    const { status } = req.query;
+    const query = {};
+    if (status && status !== "all") {
+      query.status = status; 
+    }
+
+    const requests = await donationRequestsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.send(requests);
+  } catch (err) {
+    res.status(500).send({ message: "Failed to fetch admin requests" });
+  }
+});
 
     app.get("/", (req, res) => {
       res.send("Blood donation API running");
