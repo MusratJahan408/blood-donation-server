@@ -175,19 +175,21 @@ async function run() {
 
     // donation
 
-    app.get("/search-donors", async (req, res) => {
-      try {
-        const { bloodGroup, district, upazila } = req.query;
-        const query = { status: "active" };
-        if (bloodGroup) query.bloodGroup = bloodGroup;
-        if (district) query.district = district;
-        if (upazila) query.upazila = upazila;
-        const donors = await usersCollection.find(query).toArray();
-        res.send(donors);
-      } catch (err) {
-        res.status(500).send({ message: "Search failed" });
-      }
-    });
+   app.get("/search-donors", async (req, res) => {
+  try {
+    const { bloodGroup, district, upazila } = req.query;
+    const query = { status: "active", role: "donor" }; 
+
+    if (bloodGroup) query.bloodGroup = bloodGroup;
+    if (district) query.district = district;
+    if (upazila) query.upazila = upazila;
+
+    const donors = await usersCollection.find(query).toArray();
+    res.send(donors);
+  } catch (err) {
+    res.status(500).send({ message: "Search failed" });
+  }
+});
 
     app.post("/donation-requests", async (req, res) => {
       try {
