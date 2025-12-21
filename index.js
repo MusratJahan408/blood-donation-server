@@ -24,6 +24,9 @@ async function run() {
     const db = client.db("blood-donation-db");
     const usersCollection = db.collection("users");
     const donationRequestsCollection = db.collection("donation-requests");
+    const fundingCollection = db.collection("payments");
+
+    const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
     app.post("/users", async (req, res) => {
       try {
@@ -110,12 +113,19 @@ async function run() {
 
     app.get("/users", async (req, res) => {
       try {
-        const { status } = req.query;
+        const { status, page = 1, limit = 10 } = req.query;
         const query = {};
         if (status) query.status = status;
 
-        const users = await usersCollection.find(query).toArray();
-        res.send(users);
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const users = await usersCollection
+          .find(query)
+          .skip(skip)
+          .limit(parseInt(limit))
+          .toArray();
+
+        const total = await usersCollection.countDocuments(query);
+        res.send({ users, total });
       } catch (err) {
         res.status(500).send({ message: "Failed to fetch users" });
       }
@@ -175,21 +185,21 @@ async function run() {
 
     // donation
 
-   app.get("/search-donors", async (req, res) => {
-  try {
-    const { bloodGroup, district, upazila } = req.query;
-    const query = { status: "active", role: "donor" }; 
+    app.get("/search-donors", async (req, res) => {
+      try {
+        const { bloodGroup, district, upazila } = req.query;
+        const query = { status: "active", role: "donor" };
 
-    if (bloodGroup) query.bloodGroup = bloodGroup;
-    if (district) query.district = district;
-    if (upazila) query.upazila = upazila;
+        if (bloodGroup) query.bloodGroup = bloodGroup;
+        if (district) query.district = district;
+        if (upazila) query.upazila = upazila;
 
-    const donors = await usersCollection.find(query).toArray();
-    res.send(donors);
-  } catch (err) {
-    res.status(500).send({ message: "Search failed" });
-  }
-});
+        const donors = await usersCollection.find(query).toArray();
+        res.send(donors);
+      } catch (err) {
+        res.status(500).send({ message: "Search failed" });
+      }
+    });
 
     app.post("/donation-requests", async (req, res) => {
       try {
@@ -242,22 +252,15 @@ async function run() {
         const query = {};
         if (requesterEmail) query.requesterEmail = requesterEmail;
         if (status) query.status = status;
-
+        const skip = (parseInt(page) - 1) * parseInt(limit);
         const requests = await donationRequestsCollection
           .find(query)
           .sort({ createdAt: -1 })
-          .skip((parseInt(page) - 1) * parseInt(limit))
+          .skip(skip)
           .limit(parseInt(limit))
           .toArray();
-
         const total = await donationRequestsCollection.countDocuments(query);
-
-        res.send({
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          requests,
-        });
+        res.send({ total, requests });
       } catch (err) {
         res.status(500).send({ message: "Failed to fetch donation requests" });
       }
@@ -326,20 +329,123 @@ async function run() {
 
     // Admin sees all donation requests
     app.get("/admin/donation-requests", async (req, res) => {
-  try {
-    const { status } = req.query;
-    const query = {};
-    if (status && status !== "all") {
-      query.status = status; 
-    }
+      try {
+        const { status, page = 1, limit = 10 } = req.query;
+        const query = {};
+        if (status && status !== "all") query.status = status;
 
-    const requests = await donationRequestsCollection
-      .find(query)
-      .sort({ createdAt: -1 })
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const requests = await donationRequestsCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(parseInt(limit))
+          .toArray();
+
+        const total = await donationRequestsCollection.countDocuments(query);
+        res.send({ requests, total });
+      } catch (err) {
+        res.status(500).send({ message: "Failed to fetch requests" });
+      }
+    });
+
+    app.post("/create-payment-intent", async (req, res) => {
+      try {
+        const { price } = req.body;
+        const amount = parseInt(parseFloat(price) * 100);
+
+        if (!amount || amount < 1) {
+          return res.status(400).send({ message: "Invalid amount" });
+        }
+
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: "usd",
+          payment_method_types: ["card"],
+        });
+
+        res.send({ clientSecret: paymentIntent.client_secret });
+      } catch (err) {
+        console.error("Stripe Error:", err);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    });
+
+    app.post("/fundings", async (req, res) => {
+      try {
+        const fund = req.body;
+        const formattedFund = {
+          ...fund,
+          amount: parseFloat(fund.amount),
+          date: new Date(fund.date), 
+        };
+        const result = await fundingCollection.insertOne(formattedFund);
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to save funding" });
+      }
+    });
+
+    app.get("/fundings", async (req, res) => {
+      try {
+        const result = await fundingCollection
+          .find()
+          .sort({ date: -1 })
+          .toArray();
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to fetch fundings" });
+      }
+    });
+
+ app.get("/admin-stats", async (req, res) => {
+  try {
+    const totalUsers = await usersCollection.countDocuments();
+    const totalDonationRequests = await donationRequestsCollection.countDocuments();
+
+    // Funding calculation (safe check)
+    const totalFundingResult = await fundingCollection
+      .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
       .toArray();
-    res.send(requests);
+
+    const totalFunding = totalFundingResult.length > 0 ? totalFundingResult[0].total : 0;
+
+    res.send({
+      totalUsers,
+      totalDonationRequests,
+      totalFunding,
+    });
   } catch (err) {
-    res.status(500).send({ message: "Failed to fetch admin requests" });
+    res.status(500).send({ message: "Failed to load stats" });
+  }
+});
+
+
+app.get("/total-stats", async (req, res) => {
+  try {
+    const totalUsers = await usersCollection.countDocuments();
+    const totalDonationRequests = await donationRequestsCollection.countDocuments();
+    
+    const totalFundingResult = await fundingCollection
+      .aggregate([
+        { 
+          $group: { 
+            _id: null, 
+            totalAmount: { $sum: "$amount" }
+          } 
+        }
+      ])
+      .toArray();
+
+    const totalFunding = totalFundingResult.length > 0 ? totalFundingResult[0].totalAmount : 0;
+
+    res.send({
+      totalUsers,
+      totalDonationRequests,
+      totalFunding,
+    });
+  } catch (err) {
+    res.status(500).send({ message: "Stats load korte somosya hoyeche" });
   }
 });
 
